@@ -1,7 +1,12 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:sleep_keeper/main.dart';
+import 'package:sleep_keeper/notificaiton.dart';
 import 'main_screen.dart';
 import 'package:flutter_overlay_window/flutter_overlay_window.dart';
+import 'main.dart';
 
 @pragma('vm:entry-point')
 void overlayMain() {
@@ -27,58 +32,89 @@ class OverlayApp extends StatelessWidget {
     );
   }
 }
-
-class OverlayContent extends StatelessWidget {
+class OverlayContent extends StatefulWidget {
   const OverlayContent({super.key});
 
   @override
+  State<OverlayContent> createState() => _OverlayContentState();
+}
+class _OverlayContentState extends State<OverlayContent> {
+   // 기본값
+
+
+  @override
+  void initState() {
+    super.initState();
+    setState(() {
+      opacity;
+    });
+
+
+    //_loadOpacity(); // 초기에만 이걸로 불러줌
+    // FlutterOverlayWindow.overlayListener.listen((msg) {
+    //   if (msg.toString().startsWith('opacity:')) {
+    //     final value = double.tryParse(msg.toString().split(':')[1]);
+    //     if (value != null) {
+    //       setState(() {
+    //         opacity = value;
+    //       });
+    //     }
+    //   }
+    // });
+  }
+
+
+
+  // Future<void> _loadOpacity() async {
+  //   final prefs = await SharedPreferences.getInstance();
+  //   setState(() {
+  //     opacity = prefs.getDouble('overlay_opacity') ?? 0.4;
+  //     _opacityLoaded = true;
+  //   });
+  // }
+
+  @override
   Widget build(BuildContext context) {
+    // if (!_opacityLoaded) {
+    //   return const SizedBox(); // 아직 로딩 중
+    // }
+
     return Center(
       child: Stack(
         children: [
-
           Container(
-            width: 210,         // 원하는 너비
+            width: 210,
             height: 110,
-            // padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: Colors.black.withOpacity(0.3),
+              color: Colors.black.withOpacity(opacity ?? 0.4), // ✅ SharedPreferences 적용!
               borderRadius: BorderRadius.circular(16),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black45,
-                  blurRadius: 10,
-                  offset: Offset(0, 4),
-                ),
-              ],
             ),
             child: Center(
               child: Column(
-              mainAxisSize: MainAxisSize.min,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: const [
-                SizedBox(height: 10,)
-                ,
-                Text(
-                  '남은 수면시간',
-                  style: TextStyle(
-                    color: Colors.white70,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
+                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  SizedBox(height: 10),
+                  Text(
+                    '남은 수면시간',
+                    style: TextStyle(
+                      color: Colors.white70,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                    ),
                   ),
-                ),
-                SizedBox(height: 8),
-                CountdownWidget(),
-                SizedBox(height: 12),
-
-              ],
-                              ),
+                  SizedBox(height: 8),
+                  CountdownWidget(opacity: opacity),
+                  SizedBox(height: 12),
+                ],
+              ),
             ),
           ),
-          Positioned(
-            top: -5,    // 컨테이너 위로 살짝 올리기
-            right:-5,
-            child: CloseButtonWidget(),),
+          const Positioned(
+            top: -5,
+            right: -5,
+            child: CloseButtonWidget(),
+          ),
         ],
       ),
     );
@@ -86,7 +122,8 @@ class OverlayContent extends StatelessWidget {
 }
 
 class CountdownWidget extends StatefulWidget {
-  const CountdownWidget({super.key});
+  final double? opacity;
+  const CountdownWidget({super.key, this.opacity});
 
   @override
   State<CountdownWidget> createState() => _CountdownWidgetState();
@@ -95,20 +132,58 @@ class CountdownWidget extends StatefulWidget {
 class _CountdownWidgetState extends State<CountdownWidget> {
   late DateTime _wakeUpTime;
   late Timer _timer;
+
   Duration _remaining = Duration.zero;
 
   @override
   void initState() {
     super.initState();
     // 1) 메인 앱에서 보낸 시간 수신
+
     FlutterOverlayWindow.overlayListener.listen((msg) {
-      _wakeUpTime = DateTime.parse(msg);
+      if(msg != "closeOverlay"){
+        if (msg.toString().startsWith('opacity:')) {
+          final value = double.tryParse(msg.toString().split(':')[1]);
+          if (value != null) {
+            setState(() {
+              opacity = value;
+            });
+          }
+        }
+
+      final data = jsonDecode(msg);
+      _wakeUpTime = DateTime.parse(data['wakeUpTime']);
+      setState(() {
+        opacity;// = (data['opacity'] as num).toDouble();
+      });
       _startTimer();
+
+      }
+
     });
   }
 
+  void _initWakeUpTime() async {
+    final prefs = await SharedPreferences.getInstance();
+    while (true) {
+      final storedTime = prefs.getString('wakeUpTime');
+      if (storedTime != null) {
+        _wakeUpTime = DateTime.parse(storedTime);
+        _startTimer();
+        break;
+      }
+      await Future.delayed(Duration(milliseconds: 100)); // 0.1초마다 polling
+    }
+  }
+
+
+
   void _startTimer() {
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted) {
+        // _timer?.cancel(); // 혹시라도 타이머 살아있으면 종료
+        return;
+      }
       final now = DateTime.now();
       setState(() {
         final diff = _wakeUpTime.difference(now);
@@ -162,6 +237,8 @@ class CloseButtonWidget extends StatelessWidget {
         splashRadius: 24,
         onPressed: () async {
           await FlutterOverlayWindow.closeOverlay(); // ← 여기를 이렇게!
+          await FlutterOverlayWindow.shareData("closeOverlay");
+          //cancelCountdownNotification();
         },
       ),
     );

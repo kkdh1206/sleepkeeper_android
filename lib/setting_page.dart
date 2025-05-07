@@ -1,6 +1,9 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'main_screen.dart';
+import 'main.dart';
+import 'package:intl/intl.dart';
 
 class SettingPage extends StatefulWidget {
   const SettingPage({super.key});
@@ -62,18 +65,22 @@ class _SettingPageState extends State<SettingPage> {
                       child: const Text('취소', style: TextStyle(color: Colors.white)),
                     ),
                     TextButton(
-                      onPressed: () {
+                      onPressed: () async{
                         final now = DateTime.now();
                         var wake = DateTime(
                           now.year, now.month, now.day,
                           _pickedDuration.inHours,
                           _pickedDuration.inMinutes.remainder(60),
                         );
+
                         if (wake.isBefore(now)) wake = wake.add(const Duration(days: 1));
                         selectedWakeUpTime = wake;
+                        final prefs = await SharedPreferences.getInstance();
+                        await prefs.setInt('wakeUpTime', wake.millisecondsSinceEpoch);
                         setState(() {
 
                         });
+                        Navigator.pop(context);
                         Navigator.pop(context);
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(content: Text("기상 시간이 설정되었습니다.")),
