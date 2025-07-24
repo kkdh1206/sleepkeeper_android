@@ -1,5 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:android_intent_plus/android_intent.dart';
+import 'package:android_intent_plus/flag.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sleep_keeper/main.dart';
@@ -79,43 +81,61 @@ class _OverlayContentState extends State<OverlayContent> {
     //   return const SizedBox(); // 아직 로딩 중
     // }
 
-    return Center(
-      child: Stack(
-        children: [
-          Container(
-            width: 210,
-            height: 110,
-            decoration: BoxDecoration(
-              color: Colors.black.withOpacity(opacity ?? 0.4), // ✅ SharedPreferences 적용!
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  SizedBox(height: 10),
-                  Text(
-                    '남은 수면시간',
-                    style: TextStyle(
-                      color: Colors.white70,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500,
+    return GestureDetector(
+      onTap: () async {
+        const intent = AndroidIntent(
+          action: 'android.intent.action.MAIN',
+          category: 'android.intent.category.LAUNCHER',
+          package: 'com.sleep.sleep_keeper',
+          componentName: 'com.sleep.sleep_keeper.MainActivity',
+          flags: <int>[
+            Flag.FLAG_ACTIVITY_NEW_TASK,
+            Flag.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED,
+            Flag.FLAG_ACTIVITY_SINGLE_TOP,
+            Flag.FLAG_ACTIVITY_CLEAR_TOP,
+            Flag.FLAG_ACTIVITY_REORDER_TO_FRONT,
+          ],
+        );
+        await intent.launch();
+      },
+      child: Center(
+        child: Stack(
+          children: [
+            Container(
+              width: 210,
+              height: 110,
+              decoration: BoxDecoration(
+                color: Colors.black.withOpacity(opacity ?? 0.4), // ✅ SharedPreferences 적용!
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    SizedBox(height: 10),
+                    Text(
+                      '남은 수면시간',
+                      style: TextStyle(
+                        color: Colors.white70,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
-                  ),
-                  SizedBox(height: 8),
-                  CountdownWidget(opacity: opacity),
-                  SizedBox(height: 12),
-                ],
+                    SizedBox(height: 8),
+                    CountdownWidget(opacity: opacity),
+                    SizedBox(height: 12),
+                  ],
+                ),
               ),
             ),
-          ),
-          const Positioned(
-            top: -5,
-            right: -5,
-            child: CloseButtonWidget(),
-          ),
-        ],
+            const Positioned(
+              top: -5,
+              right: -5,
+              child: CloseButtonWidget(),
+            ),
+          ],
+        ),
       ),
     );
   }
