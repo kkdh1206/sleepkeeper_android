@@ -1,77 +1,83 @@
 import 'dart:async';
 import 'dart:convert';
-import 'package:flutter/services.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_overlay_window/flutter_overlay_window.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sleep_keeper/notificaiton.dart';
-import 'package:sleep_keeper/option_page.dart';
-import 'package:sleep_keeper/sleep_state.dart';
-import 'setting_page.dart';
-import 'main.dart';
+import 'package:sleep_keeper/overlay_widget.dart';
+import 'package:sleep_keeper/state/sleep_state.dart';
+import 'package:sleep_keeper/theme/colors.dart';
+import 'package:sleep_keeper/theme/size.dart';
+import 'components/button.dart';
+import 'components/cat.dart';
+import 'components/option.dart';
 
-
-//DateTime? selectedWakeUpTime; // 설정된 기상 시간 (글로벌 변수)
 
 class MainScreen extends StatefulWidget {
-
   const MainScreen({super.key});
-
-
 
   @override
   State<MainScreen> createState() => _MainScreenState();
 }
-//const platform = MethodChannel('overlay_channel');
 
-// bool isActive = false;
 class _MainScreenState extends State<MainScreen> {
+  double opacity = 0.4;
+  DateTime? selectedWakeUpTime; // 기상 시간
+  Duration sleepTime = const Duration(hours: 8, minutes: 00); // 목표 수면 시간
 
   String get wakeUpTimeText {
     if (selectedWakeUpTime == null) return "설정된 시간 없음";
     return "${selectedWakeUpTime!.hour.toString().padLeft(2, '0')}:${selectedWakeUpTime!.minute.toString().padLeft(2, '0')}";
   }
 
+  String get sleepTimeText {
+    return "${sleepTime.inHours.toString().padLeft(2, '0')}:${sleepTime.inMinutes.remainder(60).toString().padLeft(2, '0')}";
+  }
+
   @override
   void initState() {
     super.initState();
-    _loadSavedWakeUpTime();  // 앱 시작할 때 SharedPreferences 값 불러오기
-    _loadInitialOpacity();
-    requestNotificationPermission();
-    //isActive = false;
-    // WidgetsBinding.instance.addPostFrameCallback((_) {
-    //   FlutterOverlayWindow.overlayListener.listen((msg) {
-    //     print("📩 메시지 수신: $msg");
-    //     if (msg == "closeOverlay") {
-    //       setState(() {
-    //         isActive = false;
-    //       });
-    //       cancelCountdownNotification(); // 알림 제거
-    //     }
-    //   });
-    // });
+    _loadOpacity(); // 투명도 설정 불러 오기
+    _loadWakeUpTime(); // 기상 시간 & 목표 수면 시간 불러 오기
 
+    requestNotificationPermission();
   }
 
+  /// 투명도 설정 불러 오기
+  Future<void> _loadOpacity() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      opacity = prefs.getDouble('overlay_opacity') ?? 0.4;
+    });
+  }
 
+  /// 투명도 설정 저장 하기
+  Future<void> _saveOpacity() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble('overlay_opacity', opacity);
 
-  Future<void> _loadSavedWakeUpTime() async {
+    // ✅ overlay에 바로 전달
+    await FlutterOverlayWindow.shareData('opacity:$opacity');
+  }
+
+  /// 기상 시간 & 목표 수면 시간 불러 오기
+  Future<void> _loadWakeUpTime() async {
     final prefs = await SharedPreferences.getInstance();
     final savedWakeMillis = prefs.getInt('wakeUpTime');
+    final savedSleepTime = prefs.getInt('sleepTime');
     if (savedWakeMillis != null) {
       setState(() {
         selectedWakeUpTime = DateTime.fromMillisecondsSinceEpoch(savedWakeMillis);
       });
     }
-  }
-
-  void _loadInitialOpacity() async {
-    final prefs = await SharedPreferences.getInstance();
-    setState(() {
-      opacity = prefs.getDouble('overlay_opacity') ?? 0.4;
-    });
+    if (savedSleepTime != null) {
+      setState(() {
+        sleepTime = Duration(milliseconds: savedSleepTime);
+      });
+    }
   }
 
   Future<void> requestNotificationPermission() async {
@@ -88,7 +94,6 @@ class _MainScreenState extends State<MainScreen> {
       print('✅ 이미 권한 있음');
     }
   }
-
 
   Future<void> _startSleepMode() async {
     final sleepState = context.read<SleepState>();
@@ -116,9 +121,8 @@ class _MainScreenState extends State<MainScreen> {
     final opacity = prefs.getDouble('overlay_opacity') ?? 0.4;
     // 3) 오버레이 띄우기
     await FlutterOverlayWindow.showOverlay(
-      // overlayContent: opacity.toString(),
-      width: 510,
-      height: 250,
+      width: overlayWidth.toInt(),
+      height: overlayHeight.toInt(),
       alignment: OverlayAlignment.center,
       flag: OverlayFlag.defaultFlag,
       enableDrag: true,
@@ -130,7 +134,8 @@ class _MainScreenState extends State<MainScreen> {
       try{
       await FlutterOverlayWindow.shareData(jsonEncode({
         "wakeUpTime": selectedWakeUpTime!.toIso8601String(),
-        "opacity": opacity  // 예시값
+        "opacity": opacity,
+        "sleepTime": sleepTime.inMilliseconds,
       })
       );}catch(e){}
     }
@@ -145,86 +150,220 @@ class _MainScreenState extends State<MainScreen> {
     }
 
     startCountdownNotification(selectedWakeUpTime!);
-    setState(() => sleepState.startSleep); // ✅ 여기로 이동
+    sleepState.startSleep();
   } catch (e) {
   print("❌ 수면모드 시작 실패: $e");
   }
   }
 
+  Duration _pickedDuration = const Duration(hours: 6, minutes: 30);
+  /// 기상 시간 설정하기
+  Future<void> _showTimerPicker(BuildContext context) async {
+    if (selectedWakeUpTime != null) {
+      _pickedDuration = Duration(
+        hours: selectedWakeUpTime!.hour,
+        minutes: selectedWakeUpTime!.minute,
+      );
+    }
+    await showModalBottomSheet(context: context, builder: (_) {
+      return Container(
+        decoration: const BoxDecoration(
+          borderRadius: BorderRadius.only(topLeft: Radius.circular(20), topRight: Radius.circular(20)),
+          color: primaryBackground,
+        ),
+        child:  Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Padding(
+              padding: EdgeInsets.all(24),
+              child: Text("기상 시간 설정하기", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
+            ),
+            Expanded(
+              child: CupertinoTimerPicker(
+                mode: CupertinoTimerPickerMode.hm,
+                initialTimerDuration: _pickedDuration,
+                minuteInterval: 1,
+                onTimerDurationChanged: (duration) {
+                  setState(() => _pickedDuration = duration);
+                },
+                backgroundColor: Colors.transparent,
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(24),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Button(onTap: () => Navigator.pop(context), text: '취소', type: ButtonType.tertiary),
+                  const SizedBox(width: 24),
+                  Button(onTap: () async {
+                    final now = DateTime.now();
+                    var wake = DateTime(
+                      now.year, now.month, now.day,
+                      _pickedDuration.inHours,
+                      _pickedDuration.inMinutes.remainder(60),
+                    );
 
+                    if (wake.isBefore(now)) wake = wake.add(const Duration(days: 1));
+                    selectedWakeUpTime = wake;
+                    final prefs = await SharedPreferences.getInstance();
+                    await prefs.setInt('wakeUpTime', wake.millisecondsSinceEpoch);
+                    setState(() { });
+                    Navigator.pop(context);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text("기상 시간이 설정되었습니다.")),
+                    );
+                  }, text: '확인', type: ButtonType.primary),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    });
+  }
 
-  void _goToSettings() async {
-    await Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => const SettingPage()),
-    );
-    setState(() {}); // 돌아오면 UI 갱신
+  /// 목표 수면 시간 설정하기
+  Future<void> _showTimerPicker2(BuildContext context) async {
+    await showModalBottomSheet(context: context, builder: (_) {
+      Duration newSleepTime = sleepTime;
+      return Container(
+        decoration: const BoxDecoration(
+          borderRadius: BorderRadius.only(topLeft: Radius.circular(20), topRight: Radius.circular(20)),
+          color: primaryBackground,
+        ),
+        child:  Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Padding(
+              padding: EdgeInsets.all(24),
+              child: Text("목표 수면 시간 설정하기", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
+            ),
+            Expanded(
+              child: CupertinoTimerPicker(
+                mode: CupertinoTimerPickerMode.hm,
+                initialTimerDuration: sleepTime,
+                minuteInterval: 1,
+                onTimerDurationChanged: (duration) {
+                  setState(() => newSleepTime = duration);
+                },
+                backgroundColor: Colors.transparent,
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(24),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Button(onTap: () => Navigator.pop(context), text: '취소', type: ButtonType.tertiary),
+                  const SizedBox(width: 24),
+                  Button(onTap: () async {
+                    final prefs = await SharedPreferences.getInstance();
+                    await prefs.setInt('sleepTime', newSleepTime.inMilliseconds);
+                    setState(() {
+                      sleepTime = newSleepTime;
+                    });
+                    Navigator.pop(context);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text("목표 수면 시간이 설정되었습니다.")),
+                    );
+                  }, text: '확인', type: ButtonType.primary),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     final sleepState = context.watch<SleepState>();
     return Scaffold(
-      appBar: AppBar(title: const Text('SleepKeeper')),
-      body: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Row(
+      body: SafeArea(
+        child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Column(
-              mainAxisAlignment: MainAxisAlignment.start
-              ,
+            const Stack(
               children: [
-
-                Container(
-                  child: Image.asset('assets/images/sleeping.jpeg'),
-                  width: 200,
-                  height: 300,
-
-                )
-                ,
-                Text("설정된 기상 시간: $wakeUpTimeText", style: const TextStyle(fontSize: 20)),
-                const SizedBox(height: 24),
-                // ElevatedButton(onPressed: (){setState(() {
-                //   isActive=false;
-                // });}, child: Text("active")),
-
-                ElevatedButton(
-                  onPressed: () async{
+                Cat(),
+              ],
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Option("기상 시간",
+                    child: GestureDetector(
+                      onTap: () {
+                        if (sleepState.isActive) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text("수면 모드 종료 후 변경할 수 있어요.")),
+                          );
+                          return;
+                        }
+                        _showTimerPicker(context);
+                      },
+                      child: Text(wakeUpTimeText, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: brandMain)),
+                    )
+                  ),
+                  Option("목표 수면 시간",
+                      child: GestureDetector(
+                        onTap: () {
+                          if (sleepState.isActive) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text("수면 모드 종료 후 변경할 수 있어요.")),
+                            );
+                            return;
+                          }
+                          _showTimerPicker2(context);
+                        },
+                        child: Text(sleepTimeText, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: brandMain)),
+                      )
+                  ),
+                  const SizedBox(height: 24),
+                  Option("투명도 설정",
+                    child: Slider(
+                      value: opacity,
+                      min: 0.0,
+                      max: 1.0,
+                      divisions: 10,
+                      padding: EdgeInsets.zero,
+                      label: opacity.toStringAsFixed(1),
+                      onChanged: (value) {
+                        setState(() {
+                          opacity = value;
+                        });
+                        _saveOpacity();
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Spacer(),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Button(onTap: () async{
                     if(!sleepState.isActive){
                       _startSleepMode();
                     }
                     else {
-                      setState(() {
-                        sleepState.startSleep();
-                        print("!!!");
-                      });
+                      sleepState.stopSleep();
                       cancelCountdownNotification();
-
                       await FlutterOverlayWindow.closeOverlay();
-                      // cancelCountdownNotification(); // ✅ 여기가 핵심
-
                     }
-
-                    },
-                  child: (!sleepState.isActive) ? const Text("수면 모드 시작"): const Text("수면 모드 종료") ,
-                ),
-                const SizedBox(height: 12),
-                OutlinedButton(
-                  onPressed: _goToSettings,
-                  child: const Text("시간 설정하기"),
-                ),
-                ElevatedButton(
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (context) => OptionPage()),
-                    );
-                  },
-                  child: Text('투명도 설정'),
-                ),
-              ],
-            ),
+                  }, text: (!sleepState.isActive) ? "수면 모드 시작" : "수면 모드 종료", type: ButtonType.primary),
+                  const SizedBox(height: 24),
+                  Button(onTap: () {}, text: "강제 수면 시작", type: ButtonType.secondary),
+                ],
+              ),
+            )
           ],
         ),
       ),

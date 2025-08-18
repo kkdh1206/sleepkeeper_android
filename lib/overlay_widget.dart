@@ -36,6 +36,9 @@ class OverlayContent extends StatefulWidget {
 class _OverlayContentState extends State<OverlayContent> {
   var opacity = 0.4;
   DateTime? wakeUpTime;
+  Duration? sleepTime;
+
+  bool needSleep = false;
 
   @override
   void initState() {
@@ -54,7 +57,9 @@ class _OverlayContentState extends State<OverlayContent> {
       }
       final data = jsonDecode(msg);
       setState(() {
+        needSleep = false;
         wakeUpTime = DateTime.parse(data['wakeUpTime']);
+        sleepTime = Duration(milliseconds: data['sleepTime']);
       });
     });
   }
@@ -90,7 +95,7 @@ class _OverlayContentState extends State<OverlayContent> {
           children: [
             Container(
               decoration: BoxDecoration(
-                color: Colors.black.withAlpha((255.0 * opacity).round()),
+                color: needSleep ? Colors.red.withAlpha((255.0 * opacity).round()) : Colors.black.withAlpha((255.0 * opacity).round()),
                 borderRadius: BorderRadius.circular(16),
               ),
               child: Center(
@@ -99,11 +104,16 @@ class _OverlayContentState extends State<OverlayContent> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     const Text(
-                      '남은 수면시간',
+                      '남은 수면 시간',
                       style: TextStyle(color: Colors.white70,fontSize: 13, fontWeight: FontWeight.w500),
                     ),
                     const SizedBox(height: 8),
-                    if (wakeUpTime != null) CountdownWidget(wakeUpTime: wakeUpTime!),
+                    if (wakeUpTime != null && sleepTime != null)
+                      CountdownWidget(wakeUpTime: wakeUpTime!, sleepTime: sleepTime!, needSleep: () {
+                        setState(() {
+                          needSleep = true;
+                        });
+                    }),
                   ],
                 ),
               ),
@@ -122,7 +132,9 @@ class _OverlayContentState extends State<OverlayContent> {
 
 class CountdownWidget extends StatefulWidget {
   final DateTime wakeUpTime;
-  const CountdownWidget({super.key, required this.wakeUpTime});
+  final Duration sleepTime;
+  final Function() needSleep;
+  const CountdownWidget({super.key, required this.wakeUpTime, required this.needSleep, required this.sleepTime});
 
   @override
   State<CountdownWidget> createState() => _CountdownWidgetState();
@@ -147,7 +159,10 @@ class _CountdownWidgetState extends State<CountdownWidget> {
       setState(() {
         final diff = widget.wakeUpTime.difference(now);
         _remaining = diff.isNegative ? Duration.zero : diff;
-      });
+        if (_remaining.inMinutes < widget.sleepTime.inMinutes) {
+          widget.needSleep();
+        }
+        });
     });
   }
 

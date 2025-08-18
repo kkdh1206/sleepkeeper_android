@@ -5,7 +5,7 @@ import 'package:flutter_overlay_window/flutter_overlay_window.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sleep_keeper/notificaiton.dart';
-import 'package:sleep_keeper/sleep_state.dart';
+import 'package:sleep_keeper/state/sleep_state.dart';
 import 'main_screen.dart';
 import 'overlay_widget.dart';
 import 'package:shared_preferences_android/shared_preferences_android.dart';
@@ -97,9 +97,9 @@ class SleepKeeperApp extends StatefulWidget {
   @override
   State<SleepKeeperApp> createState() => _SleepKeeperAppState();
 }
-DateTime? selectedWakeUpTime;
-double? opacity;
+
 String? wakeUpTime;
+
 class _SleepKeeperAppState extends State<SleepKeeperApp> {
 
 
@@ -115,7 +115,7 @@ class _SleepKeeperAppState extends State<SleepKeeperApp> {
     final savedWakeMillis = prefs.getInt('wakeUpTime');
     if (savedWakeMillis != null) {
       setState(() {
-        selectedWakeUpTime = DateTime.fromMillisecondsSinceEpoch(savedWakeMillis);
+        // selectedWakeUpTime = DateTime.fromMillisecondsSinceEpoch(savedWakeMillis);  // 여기!
         wakeUpTime = savedWakeMillis.toString();
       });
     }

@@ -1,9 +1,9 @@
-import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart';
 
 class SleepState extends ChangeNotifier {
   bool _isActive = false;
 
-  bool get isActive => _isActive; // _앞에 붙으면 접근모샣서 이걸 써준거임
+  bool get isActive => _isActive;
 
   void startSleep() {
     _isActive = true;
