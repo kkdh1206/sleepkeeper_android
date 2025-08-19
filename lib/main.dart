@@ -1,5 +1,3 @@
-import 'dart:ffi';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_overlay_window/flutter_overlay_window.dart';
 import 'package:provider/provider.dart';
@@ -8,29 +6,15 @@ import 'package:sleep_keeper/notificaiton.dart';
 import 'package:sleep_keeper/state/sleep_state.dart';
 import 'main_screen.dart';
 import 'overlay_widget.dart';
-import 'package:shared_preferences_android/shared_preferences_android.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
 FlutterLocalNotificationsPlugin();
 
-void main() async{//async{
+void main() async {
   final sleepState = SleepState();
   WidgetsFlutterBinding.ensureInitialized();
 
-
-
-  // final overlayEntry = OverlayEntry();
-  // Overlay.of(context).insert(overlayEntry)
-  // FlutterOverlayWindow.initOverlay(
-  //   entrypoint: 'overlayMain', // isolate 이름으로 등록
-  // );
-  // FlutterOverlayWindow.setPluginRegistrant((registry) {
-  //   // Android 전용 registrar를 이용해 SharedPreferences 플러그인 등록
-  //   SharedPreferencesAndroid.registerWith(
-  //     registry.registrarFor(SharedPreferencesAndroid.kPluginKey),
-  //   );
-  // });
   const AndroidInitializationSettings initializationSettingsAndroid =
   AndroidInitializationSettings('@mipmap/ic_launcher');
 
@@ -39,7 +23,6 @@ void main() async{//async{
   );
 
   await flutterLocalNotificationsPlugin.initialize(initializationSettings);
-
 
   await flutterLocalNotificationsPlugin.initialize(
     initializationSettings,
@@ -50,12 +33,8 @@ void main() async{//async{
 
         sleepState.stopSleep();
       }
-      // if (response.actionId == 'restart') {
-      //   await startSleep(); // 오버레이 다시 실행 함수
-      // }
     },
   );
-
 
   runApp(ChangeNotifierProvider.value(
     value: sleepState,
@@ -91,6 +70,7 @@ void overlayMain() {
 
   runApp(const OverlayApp());
 }
+
 class SleepKeeperApp extends StatefulWidget {
   const SleepKeeperApp({super.key});
 
@@ -98,29 +78,7 @@ class SleepKeeperApp extends StatefulWidget {
   State<SleepKeeperApp> createState() => _SleepKeeperAppState();
 }
 
-String? wakeUpTime;
-
 class _SleepKeeperAppState extends State<SleepKeeperApp> {
-
-
-  @override
-  void initState() {
-    super.initState();
-    getPref();
-  }
-
-
-  Future<void> getPref() async {
-    final prefs = await SharedPreferences.getInstance();
-    final savedWakeMillis = prefs.getInt('wakeUpTime');
-    if (savedWakeMillis != null) {
-      setState(() {
-        // selectedWakeUpTime = DateTime.fromMillisecondsSinceEpoch(savedWakeMillis);  // 여기!
-        wakeUpTime = savedWakeMillis.toString();
-      });
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return MaterialApp(

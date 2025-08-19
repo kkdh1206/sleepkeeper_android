@@ -2,32 +2,125 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:android_intent_plus/android_intent.dart';
 import 'package:android_intent_plus/flag.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_overlay_window/flutter_overlay_window.dart';
+import 'package:sleep_keeper/theme/colors.dart';
+
+enum OverlayMode { timer, forceSleep }
 
 @pragma('vm:entry-point')
 void overlayMain() {
   runApp(const OverlayApp());
 }
 
-class OverlayApp extends StatelessWidget {
+class OverlayApp extends StatefulWidget {
   const OverlayApp({super.key});
 
   @override
+  State<OverlayApp> createState() => _OverlayAppState();
+}
+
+class _OverlayAppState extends State<OverlayApp> {
+  OverlayMode _mode = OverlayMode.timer;
+  Map<String, dynamic>? _payload;
+
+  @override
+  void initState() {
+    super.initState();
+    FlutterOverlayWindow.overlayListener.listen((event) {
+      try {
+        final map = event is String ? jsonDecode(event) : event as Map;
+        setState(() {
+          _mode = _parseMode(map['type'] as String?);
+          _payload = (map as Map?)?.cast<String, dynamic>();
+        });
+      } catch (_) {
+
+      }
+    });
+  }
+
+  OverlayMode _parseMode(String? t) {
+    switch (t) {
+      case 'forceSleep': return OverlayMode.forceSleep;
+      case 'timer':
+      default: return OverlayMode.timer;
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return const Directionality(
+    final Widget child;
+    switch (_mode) {
+      case OverlayMode.timer:
+        child = OverlayContent(payload: _payload);
+        break;
+      case OverlayMode.forceSleep:
+        child = ForceSleepContent(payload: _payload);
+        break;
+    }
+
+    return Directionality(
       textDirection: TextDirection.ltr,
       child: Align(
         alignment: Alignment.center,
-        child: OverlayContent(),
+        child: child,
+      ),
+    );
+  }
+}
+
+class ForceSleepContent extends StatefulWidget {
+  final Map<String, dynamic>? payload;
+  const ForceSleepContent({super.key, this.payload});
+
+  @override
+  State<ForceSleepContent> createState() => _ForceSleepContentState();
+}
+
+class _ForceSleepContentState extends State<ForceSleepContent> {
+  @override
+  void initState() {
+    super.initState();
+    _applyPayload(widget.payload);
+  }
+
+  @override
+  void didUpdateWidget(covariant ForceSleepContent oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!mapEquals(oldWidget.payload, widget.payload)) {
+      _applyPayload(widget.payload);
+    }
+  }
+
+  void _applyPayload(Map<String, dynamic>? p) {
+    // 10초 뒤에 오버레이 종료
+    Future.delayed(const Duration(seconds: 10), () async {
+      if (!mounted) return;
+      await FlutterOverlayWindow.closeOverlay();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      height: double.infinity,
+      color: Colors.black,
+      child: const Center(
+        child: Text("잠시 뒤에 자동으로 화면이 풀립니다.\n\n얼른 주무세요!",
+          style: TextStyle(color: secondaryBackground, fontSize: 20, fontWeight: FontWeight.bold),
+          textAlign: TextAlign.center
+        )
       ),
     );
   }
 }
 
 class OverlayContent extends StatefulWidget {
-  const OverlayContent({super.key});
+  final Map<String, dynamic>? payload;
+  const OverlayContent({super.key, this.payload});
 
   @override
   State<OverlayContent> createState() => _OverlayContentState();
@@ -37,37 +130,30 @@ class _OverlayContentState extends State<OverlayContent> {
   var opacity = 0.4;
   DateTime? wakeUpTime;
   Duration? sleepTime;
-
   bool needSleep = false;
 
-  @override
+ @override
   void initState() {
     super.initState();
-
-    _loadOpacity();
-    FlutterOverlayWindow.overlayListener.listen((msg) {
-      if (msg.toString().startsWith('opacity:')) {
-        final value = double.tryParse(msg.toString().split(':')[1]);
-        if (value != null) {
-          setState(() {
-            opacity = value;
-          });
-        }
-        return;
-      }
-      final data = jsonDecode(msg);
-      setState(() {
-        needSleep = false;
-        wakeUpTime = DateTime.parse(data['wakeUpTime']);
-        sleepTime = Duration(milliseconds: data['sleepTime']);
-      });
-    });
+    _applyPayload(widget.payload);
   }
 
-  Future<void> _loadOpacity() async {
-    final prefs = await SharedPreferences.getInstance();
+  @override
+  void didUpdateWidget(covariant OverlayContent oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!mapEquals(oldWidget.payload, widget.payload)) {
+      _applyPayload(widget.payload);
+    }
+  }
+
+  void _applyPayload(Map<String, dynamic>? p) {
     setState(() {
-      opacity = prefs.getDouble('overlay_opacity') ?? 0.4;
+      opacity = p?['opacity'] ?? 0.4;
+      if (p?['wakeUpTime'] != null) {
+        needSleep = false;
+        wakeUpTime = DateTime.parse(p?['wakeUpTime']);
+        sleepTime = Duration(milliseconds: p?['sleepTime']);
+      }
     });
   }
 

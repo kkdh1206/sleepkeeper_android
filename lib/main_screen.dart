@@ -7,7 +7,6 @@ import 'package:flutter_overlay_window/flutter_overlay_window.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sleep_keeper/notificaiton.dart';
-import 'package:sleep_keeper/overlay_widget.dart';
 import 'package:sleep_keeper/state/sleep_state.dart';
 import 'package:sleep_keeper/theme/colors.dart';
 import 'package:sleep_keeper/theme/size.dart';
@@ -60,7 +59,10 @@ class _MainScreenState extends State<MainScreen> {
     await prefs.setDouble('overlay_opacity', opacity);
 
     // ✅ overlay에 바로 전달
-    await FlutterOverlayWindow.shareData('opacity:$opacity');
+    await FlutterOverlayWindow.shareData(jsonEncode({
+      'type': 'timer',
+      "opacity": opacity,
+    }));
   }
 
   /// 기상 시간 & 목표 수면 시간 불러 오기
@@ -85,75 +87,97 @@ class _MainScreenState extends State<MainScreen> {
       final status = await Permission.notification.request();
       if (status.isDenied) {
         // 사용자가 거부
-        print('❌ 알림 권한 거부됨');
+        debugPrint('❌ 알림 권한 거부됨');
       } else if (status.isGranted) {
         // 사용자가 허용
-        print('✅ 알림 권한 허용됨');
+        debugPrint('✅ 알림 권한 허용됨');
       }
     } else {
-      print('✅ 이미 권한 있음');
+      debugPrint('✅ 이미 권한 있음');
     }
   }
 
   Future<void> _startSleepMode() async {
     final sleepState = context.read<SleepState>();
-    // 1) 현재 권한 상태 확인 (bool? 리턴)
-    final bool? hasPermission = await FlutterOverlayWindow.isPermissionGranted();
 
-    // 2) 권한이 없거나 null 이면 requestPermission() 으로 권한 요청
-    try{
-    if (hasPermission != true) {
-      final bool? permissionResult = await FlutterOverlayWindow.requestPermission();
-      if (permissionResult != true) {
-        // 권한이 여전히 없으면 스낵바 띄우고 종료
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('오버레이 권한이 필요합니다. 설정에서 허용해주세요.')),
-        );
+    // 1) 현재 권한 상태 확인
+    final bool hasPermission = await FlutterOverlayWindow.isPermissionGranted();
+
+    try {
+      // 2) 권한이 없거나 null 이면 requestPermission() 으로 권한 요청
+      if (hasPermission != true) {
+        final bool? permissionResult = await FlutterOverlayWindow.requestPermission();
+        if (permissionResult != true) {
+          // 권한이 여전히 없으면 스낵바 띄우고 종료
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('오버레이 권한이 필요합니다. 설정에서 허용해주세요.')),
+          );
+          return;
+        }
+        // 권한 화면으로 이동했으니, 사용자가 설정을 마친 뒤 다시 버튼을 눌러 재호출해주세요.
         return;
       }
-      // 권한 화면으로 이동했으니, 사용자가 설정을 마친 뒤 다시 버튼을 눌러 재호출해주세요.
-      return;
-    }
 
+      // 3) 오버레이 띄우기
+      await FlutterOverlayWindow.showOverlay(
+        width: overlayWidth.toInt(),
+        height: overlayHeight.toInt(),
+        alignment: OverlayAlignment.center,
+        flag: OverlayFlag.defaultFlag,
+        enableDrag: true,
+      );
 
-
-    final prefs = await SharedPreferences.getInstance();
-    final opacity = prefs.getDouble('overlay_opacity') ?? 0.4;
-    // 3) 오버레이 띄우기
-    await FlutterOverlayWindow.showOverlay(
-      width: overlayWidth.toInt(),
-      height: overlayHeight.toInt(),
-      alignment: OverlayAlignment.center,
-      flag: OverlayFlag.defaultFlag,
-      enableDrag: true,
-    );
-
-
-    // 2) 기상 시간 공유 (shareData 방식)
-    if (selectedWakeUpTime != null) {
-      try{
+      // 4) 기상 시간 공유 (shareData 방식)
       await FlutterOverlayWindow.shareData(jsonEncode({
+        'type': 'timer',
         "wakeUpTime": selectedWakeUpTime!.toIso8601String(),
         "opacity": opacity,
         "sleepTime": sleepTime.inMilliseconds,
-      })
-      );}catch(e){}
+      }));
+
+      startCountdownNotification(selectedWakeUpTime!);
+      sleepState.startSleep();
+    } catch (e) {
+      debugPrint("❌ 수면모드 시작 실패: $e");
     }
-    else{
-      await Future.delayed(const Duration(seconds: 1));
-      if (selectedWakeUpTime != null) {
-        await FlutterOverlayWindow.shareData(
-          selectedWakeUpTime!.toIso8601String(),
-        );
+  }
+
+  Future<void> _startForceSleepMode() async {
+    // 1) 현재 권한 상태 확인
+    final bool hasPermission = await FlutterOverlayWindow.isPermissionGranted();
+
+    try {
+      // 2) 권한이 없거나 null 이면 requestPermission() 으로 권한 요청
+      if (hasPermission != true) {
+        final bool? permissionResult = await FlutterOverlayWindow.requestPermission();
+        if (permissionResult != true) {
+          // 권한이 여전히 없으면 스낵바 띄우고 종료
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('오버레이 권한이 필요합니다. 설정에서 허용해주세요.')),
+          );
+          return;
+        }
+        // 권한 화면으로 이동했으니, 사용자가 설정을 마친 뒤 다시 버튼을 눌러 재호출해주세요.
+        return;
       }
 
+      // 3) 오버레이 띄우기
+      await FlutterOverlayWindow.showOverlay(
+        width: WindowSize.matchParent,
+        height: WindowSize.matchParent,
+        alignment: OverlayAlignment.topLeft,
+        flag: OverlayFlag.defaultFlag,
+        enableDrag: false,
+        positionGravity: PositionGravity.none,
+        startPosition: const OverlayPosition(0, 0),
+      );
+      await FlutterOverlayWindow.shareData(jsonEncode({
+        'type': 'forceSleep',
+        'salt': DateTime.now().millisecond, // 재사용 막기 위한 랜덤 값으로...
+      }));
+    } catch (e) {
+      debugPrint("❌ 강제 수면 모드 시작 실패: $e");
     }
-
-    startCountdownNotification(selectedWakeUpTime!);
-    sleepState.startSleep();
-  } catch (e) {
-  print("❌ 수면모드 시작 실패: $e");
-  }
   }
 
   Duration _pickedDuration = const Duration(hours: 6, minutes: 30);
@@ -349,7 +373,13 @@ class _MainScreenState extends State<MainScreen> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Button(onTap: () async{
+                  Button(onTap: () async {
+                    if (selectedWakeUpTime == null) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text("먼저 기상 시간을 설정해주세요.")),
+                      );
+                      return;
+                    }
                     if(!sleepState.isActive){
                       _startSleepMode();
                     }
@@ -360,7 +390,9 @@ class _MainScreenState extends State<MainScreen> {
                     }
                   }, text: (!sleepState.isActive) ? "수면 모드 시작" : "수면 모드 종료", type: ButtonType.primary),
                   const SizedBox(height: 24),
-                  Button(onTap: () {}, text: "강제 수면 시작", type: ButtonType.secondary),
+                  Button(onTap: () {
+                    _startForceSleepMode();
+                  }, text: "강제 수면 시작", type: ButtonType.secondary),
                 ],
               ),
             )

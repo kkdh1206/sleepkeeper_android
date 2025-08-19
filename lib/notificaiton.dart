@@ -1,17 +1,13 @@
-
-
 import 'dart:async';
-
+import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:sleep_keeper/main.dart';
 
 int notificationId = 0;
 Timer? timer;
 
-
-
 void startCountdownNotification(DateTime wakeUpTime) {
-  print("🔔 startCountdownNotification called");
+  debugPrint("🔔 startCountdownNotification called");
   timer?.cancel(); // 기존 타이머 정리
   timer = Timer.periodic(const Duration(seconds: 1), (timer) async {
     final now = DateTime.now();
@@ -40,7 +36,7 @@ void startCountdownNotification(DateTime wakeUpTime) {
     await flutterLocalNotificationsPlugin.show(
       notificationId, // 같은 ID → 같은 notification 갱신됨
       '남은 수면 시간',
-      //if(wakeuptime 이 올때)
+      // if (wakeUpTime이 올 때)
       display,
       platformDetails,
     );
